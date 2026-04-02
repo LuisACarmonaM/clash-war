@@ -44,7 +44,7 @@ class WarController extends Controller
                     )->post('https://api.ocr.space/parse/image', [
                         'apikey' => $apiKey,
                         'language' => 'eng',
-                        'OCREngine' => '1'
+                        'OCREngine' => '3'
                     ]);
 
                 $result = $response->json();
