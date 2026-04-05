@@ -18,7 +18,6 @@ class WarController extends Controller
     public function processImage(Request $request)
     {
         set_time_limit(300);
-        // 1. CORRECCIÓN DE VALIDACIÓN: Validamos el campo 'war_images' Y sus archivos hijos '.*'
         $request->validate([
             'war_images'   => 'required|array',
             'war_images.*' => 'required|image|mimes:jpeg,png,jpg',
@@ -28,90 +27,137 @@ class WarController extends Controller
         ]);
 
         session(['selected_month' => $request->month, 'selected_year' => $request->year]);
-
         $weekColumn = $request->input('week');
-        $apiKey = 'K86510533188957'; // 👈 Asegúrate de poner tu clave
+        $apiKey = 'K86510533188957';
         $totalProcessed = 0;
+        $jugadoresProcesados = [];
+
         foreach ($request->file('war_images') as $image) {
-            try {
-                // Aumentamos el timeout a 90 por si el lote es pesado
-                $response = Http::timeout(180)          // Tiempo total de la operación
-                    ->connectTimeout(30)                // 👈 Tiempo para encontrar la dirección IP (DNS)
-                    ->attach(
-                        'file',
-                        file_get_contents($image->getPathname()),
-                        'captura.jpg'
-                    )->post('https://api.ocr.space/parse/image', [
-                        'apikey' => $apiKey,
-                        'language' => 'eng',
-                        'OCREngine' => '3'
-                    ]);
 
-                $result = $response->json();
-                $ocrText = $result['ParsedResults'][0]['ParsedText'] ?? null;
-                dd($result['ParsedResults'][0]['ParsedText']);
-                if ($ocrText) {
-                    // --- PASO 1: Intentamos capturar con ambos métodos ---
+            // 1. SISTEMA DE REINTENTOS PARA LA API
+            $maxIntentos = 3;
+            $intentoActual = 0;
+            $ocrText = null;
 
-                    // Tu método original (Formato tabla con barras y número de posición)
-                    preg_match_all('/\|\s*\d+\s*\|(?:[^|]*\|)?\s*([^|]+?)\s*\|(?:[^|]*\|)?\s*(\d{1,4})\s*\|/', $ocrText, $matchesOriginal, PREG_SET_ORDER);
+            while ($intentoActual < $maxIntentos) {
+                $intentoActual++;
+                try {
+                    $response = Http::timeout(180)->connectTimeout(30)
+                        ->attach('file', file_get_contents($image->getPathname()), 'captura.jpg')
+                        ->post('https://api.ocr.space/parse/image', [
+                            'apikey' => $apiKey,
+                            'language' => 'eng',
+                            'OCREngine' => '3'
+                        ]);
 
-                    // Mi método nuevo (Formato Markdown con celdas vacías al inicio)
-                    preg_match_all('/\|\s*\|\s*([^|]+?)\s*\|\s*(\d{1,4})\s*\|/', $ocrText, $matchesMarkdown, PREG_SET_ORDER);
+                    $result = $response->json();
 
-                    // Combinamos ambos resultados para procesarlos igual
-                    $allMatches = array_merge($matchesOriginal, $matchesMarkdown);
+                    if (isset($result['IsErroredOnProcessing']) && $result['IsErroredOnProcessing'] === true) {
+                        sleep(3);
+                        continue;
+                    }
 
-                    foreach ($allMatches as $match) {
-                        $playerName = trim($match[1]);
-                        $score = (int) $match[2];
+                    if (isset($result['ParsedResults'][0]['ParsedText'])) {
+                        $ocrText = $result['ParsedResults'][0]['ParsedText'];
+                        break;
+                    }
+                } catch (\Exception $e) {
+                    sleep(3);
+                }
+            }
 
-                        // --- PASO 2: Filtros de limpieza para evitar líneas como "a de bata" ---
+            if (!$ocrText) continue;
 
-                        // 1. Quitamos el "ID " si existe
-                        $playerName = preg_replace('/^ID\s+/i', '', $playerName);
+            // 2. NUEVA LÓGICA DE EXTRACCIÓN POR COLUMNAS (A prueba de balas)
+            $jugadoresEnEstaImagen = [];
+            $prohibitedWords = ['---', 'rank', 'user', 'name', 'points', 'vale', 'detalles', 'guerra', 'batalla', 'id'];
 
-                        // 2. Definimos palabras prohibidas que el OCR suele confundir
-                        $prohibitedWords = ['---', 'Vale', 'bata', 'Detalles', 'guerra', 'dia de', 'batalla'];
-                        $isProhibited = false;
-                        foreach ($prohibitedWords as $word) {
-                            if (stripos($playerName, $word) !== false) {
-                                $isProhibited = true;
-                                break;
-                            }
-                        }
+            // Cortamos el texto gigante en líneas individuales
+            $lineas = explode("\n", $ocrText);
 
-                        // --- PASO 3: Guardado final ---
-                        // Solo guardamos si: no es prohibido, no es un número puro, y tiene longitud razonable
-                        if (
-                            !$isProhibited &&
-                            !is_numeric($playerName) &&
-                            strlen($playerName) > 2
-                        ) {
-                            $player = Player::firstOrNew(['name' => $playerName]);
-                            $player->{$weekColumn} = $score; // Usamos la columna seleccionada
-                            $player->save();
-                            $totalProcessed++;
-                        }
+            foreach ($lineas as $linea) {
+                // Si la línea no tiene una barra "|", no es de la tabla
+                if (strpos($linea, '|') === false) continue;
+
+                // Cortamos la línea por las barras
+                $columnasCrudas = explode('|', $linea);
+                $columnas = [];
+
+                // Limpiamos espacios vacíos y columnas inútiles
+                foreach ($columnasCrudas as $col) {
+                    $limpio = trim($col);
+                    if ($limpio !== '' && !preg_match('/^[-:\s]+$/', $limpio)) {
+                        $columnas[] = $limpio;
                     }
                 }
 
-                // Pausa de cortesía para la API gratuita
-                sleep(3);
-            } catch (\Exception $e) {
-                // En lugar de 'continue', vamos a registrar el error para saber qué pasó
-                \Log::error("Error procesando imagen: " . $e->getMessage());
-                return back()->withErrors(['war_images' => "Error en una de las imágenes: " . $e->getMessage()]);
+                $cantidadColumnas = count($columnas);
+                if ($cantidadColumnas == 0) continue;
+
+                $nombre = '';
+                $puntos = 0;
+
+                // Analizamos de derecha a izquierda:
+                $ultimaColumna = strtolower($columnas[$cantidadColumnas - 1]);
+
+                // Si el OCR confundió un 0 con la letra 'O'
+                if ($ultimaColumna === 'o') $ultimaColumna = '0';
+
+                // Si la última columna es un número, son los puntos.
+                if (is_numeric(preg_replace('/[^0-9]/', '', $ultimaColumna))) {
+                    $puntos = (int) preg_replace('/[^0-9]/', '', $ultimaColumna);
+                    if ($cantidadColumnas >= 2) {
+                        $nombre = $columnas[$cantidadColumnas - 2]; // El nombre es el anterior
+                    }
+                } else {
+                    // Si no hay número al final, significa que el OCR se saltó los puntos
+                    $nombre = $columnas[$cantidadColumnas - 1]; // La última columna es el nombre
+                    $puntos = 0;
+                }
+
+                // --- LIMPIEZA FINAL DEL NOMBRE ---
+                $nombre = trim($nombre);
+                $nombre = preg_replace('/^ID\s+/i', '', $nombre); // Quitamos el "ID "
+                $nombre = preg_replace('/^\d+\s+/', '', $nombre); // Quitamos si se coló un número de ranking
+
+                // --- FILTROS ---
+                // Ignoramos la línea de "19 h 24 min"
+                if (preg_match('/h\s*\d+\s*min/i', $nombre)) continue;
+
+                if (in_array(strtolower($nombre), $prohibitedWords)) continue;
+                if (is_numeric($nombre) || strlen($nombre) < 2) continue;
+
+                // ¡Aprobado! Lo metemos al arreglo
+                $jugadoresEnEstaImagen[$nombre] = $puntos;
             }
+
+            // 3. GUARDADO EN BASE DE DATOS
+            $count = 0;
+            foreach ($jugadoresEnEstaImagen as $nombre => $puntos) {
+                if ($count >= 9) break;
+
+                $player = Player::firstOrNew(['name' => $nombre]);
+                $player->{$weekColumn} = $puntos;
+                $player->save();
+
+                $jugadoresProcesados[] = ['nombre' => $nombre, 'puntos' => $puntos];
+                $totalProcessed++;
+                $count++;
+            }
+
+            sleep(2); // Pausa de cortesía entre imágenes
         }
+
+        // Puedes dejar esto para ver la magia de la extracción perfecta
+        //dd($result, $jugadoresProcesados);
 
         if ($totalProcessed === 0) {
-            return back()->withErrors(['war_images' => 'No se detectaron datos. Asegúrate de que las capturas sean claras y se vea la columna de puntos.']);
+            return back()->withErrors(['war_images' => 'No se detectaron datos. Asegúrate de que las capturas sean claras.']);
         }
 
-        return back()->with('success', "¡Éxito! Se procesaron las imágenes y se actualizaron $totalProcessed registros.");
+        return back()->with('success', "¡Éxito! Se procesaron las imágenes y se actualizaron $totalProcessed registros.")
+            ->with('jugadores', $jugadoresProcesados);
     }
-
     public function downloadExcel()
     {
         $month = session('selected_month', 'General');
