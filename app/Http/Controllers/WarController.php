@@ -7,12 +7,30 @@ use App\Models\Player;
 use App\Exports\PlayersExport;
 use Maatwebsite\Excel\Facades\Excel;
 use Illuminate\Support\Facades\Http;
+use App\Services\DolarApiService; // Importamos el servicio
+
 
 class WarController extends Controller
 {
+    protected $dolarApi;
+
+    // Inyectamos el servicio en el constructor
+    public function __construct(DolarApiService $dolarApi)
+    {
+        $this->dolarApi = $dolarApi;
+    }
+
     public function index()
     {
-        return view('war.index');
+        // Obtener datos de la API del dólar
+        $tasasDolar = $this->dolarApi->getTasas();
+        $estadoApi = $this->dolarApi->getEstado();
+        //dd($tasasDolar);
+        // Pasar los datos a la vista
+        return view('war.index', [
+            'tasasDolar' => $tasasDolar,
+            'estadoApi' => $estadoApi
+        ]);
     }
 
     public function processImage(Request $request)
@@ -28,7 +46,7 @@ class WarController extends Controller
 
         session(['selected_month' => $request->month, 'selected_year' => $request->year]);
         $weekColumn = $request->input('week');
-        $apiKey = 'K86510533188957';
+        $apiKey = env('API_KEY_EXTERNAL');
         $totalProcessed = 0;
         $jugadoresProcesados = [];
 
