@@ -3,7 +3,7 @@
 
 <head>
     <meta charset="UTF-8">
-    <title>Gestión de Guerra de Clanes</title>
+    <title>Guerra de Clanes</title>
     <link rel="stylesheet" href="{{ asset('css/estilosglobales.css') }}">
 </head>
 
@@ -12,11 +12,7 @@
     <div class="main-layout">
         <!-- Columna izquierda - Contenido principal -->
         <div class="main-content">
-            <h1 class="section-title">⚔️ Lector de Puntos de Guerra</h1>
-
-            @if (session('success'))
-                <div class="alert alert-success">✅ {{ session('success') }}</div>
-            @endif
+            <h1 class="section-title">⚔️ Puntos de Guerra</h1>
 
             @if ($errors->any())
                 <div class="alert alert-danger">
@@ -33,20 +29,49 @@
                 @csrf
 
                 <div class="season-box form-group">
-                    <label>Temporada del Reporte:</label>
+                    <label>Reporte de Temporada:</label>
                     <div style="display: flex; gap: 10px;">
+
+                        <!-- MES AUTOMÁTICO (Bono extra) -->
                         <select name="month" id="month" required style="flex: 2;">
-                            @foreach (['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'] as $m)
-                                <option value="{{ $m }}" {{ $m == 'Abril' ? 'selected' : '' }}>
-                                    {{ $m }}</option>
+                            @php
+                                $meses = [
+                                    'Enero',
+                                    'Febrero',
+                                    'Marzo',
+                                    'Abril',
+                                    'Mayo',
+                                    'Junio',
+                                    'Julio',
+                                    'Agosto',
+                                    'Septiembre',
+                                    'Octubre',
+                                    'Noviembre',
+                                    'Diciembre',
+                                ];
+                                $mesActual = $meses[date('n') - 1]; // Obtiene el mes actual en español
+                            @endphp
+
+                            @foreach ($meses as $m)
+                                <option value="{{ $m }}" {{ $m == $mesActual ? 'selected' : '' }}>
+                                    {{ $m }}
+                                </option>
                             @endforeach
                         </select>
 
+                        <!-- AÑO AUTOMÁTICO -->
                         <select name="year" id="year" required style="flex: 1;">
-                            <option value="2025">2025</option>
-                            <option value="2026" selected>2026</option>
-                            <option value="2027">2027</option>
+                            @php
+                                $currentYear = date('Y');
+                            @endphp
+
+                            <!-- Año actual (seleccionado por defecto) -->
+                            <option value="{{ $currentYear }}" selected>{{ $currentYear }}</option>
+
+                            <!-- Un año más en el futuro -->
+                            <option value="{{ $currentYear + 1 }}">{{ $currentYear + 1 }}</option>
                         </select>
+
                     </div>
                     <small style="color: #666; margin-top: 5px; display: block;">Esto dará nombre a tu archivo
                         Excel.</small>
@@ -72,7 +97,7 @@
 
                 <button type="submit" class="btn" id="submitBtn"
                     style="background-color: #3498db; color: white; width: 100%;">
-                    🚀 Procesar Lote de Imágenes
+                    🚀 Procesar Imágenes
                 </button>
             </form>
 
@@ -84,11 +109,10 @@
                         Excel</button>
                 </form>
 
-                <form action="{{ route('clear') }}" method="POST"
-                    onsubmit="return confirm('⚠️ ¿Borrar todos los datos?');">
+                <form action="{{ route('clear') }}" method="POST" id="form-limpiar-bd">
                     @csrf
-                    <button type="submit" class="btn" style="background-color: #e74c3c; color: white;">🗑️ Limpiar
-                        BD</button>
+                    <button type="submit" class="btn" style="background-color: #e74c3c; color: white;">🗑️ Borrar
+                        Datos</button>
                 </form>
             </div>
         </div>
@@ -137,11 +161,50 @@
             </div>
         </div>
     </div>
-
     <!-- Solo los scripts, sin código inline -->
+    <script src="{{ asset('plugins/sweetalert2/sweetalert2.min.js') }}"></script>
     <script src="{{ asset('js/calculadora.js') }}"></script>
     <script src="{{ asset('js/clan-wars.js') }}"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Si hay un mensaje de éxito desde el backend
+            @if (session('success'))
+                Swal.fire({
+                    title: '¡Completado!',
+                    text: "{{ session('success') }}",
+                    icon: 'success',
+                    confirmButtonText: 'Genial',
+                    confirmButtonColor: '#27ae60'
+                }).then((result) => {
+                    // 👇 ESTO OCURRE AL DARLE CLIC A "GENIAL" 👇
+                    if (result.isConfirmed) {
+                        // Limpiamos el formulario para que quede en blanco
+                        document.getElementById('uploadForm').reset();
 
+                        // Y limpiamos el textito azul de "X imágenes seleccionadas"
+                        const fileCount = document.getElementById('file-count');
+                        if (fileCount) fileCount.textContent = '';
+                    }
+                });
+            @endif
+
+            // Si hay errores desde el backend (ej. falló la API, no subió fotos)
+            @if ($errors->any())
+                let errorMessages = '';
+                @foreach ($errors->all() as $error)
+                    errorMessages += '{{ $error }}\n';
+                @endforeach
+
+                Swal.fire({
+                    title: 'Hubo un problema',
+                    text: errorMessages,
+                    icon: 'error',
+                    confirmButtonText: 'Entendido',
+                    confirmButtonColor: '#e74c3c'
+                });
+            @endif
+        });
+    </script>
 </body>
 
 </html>

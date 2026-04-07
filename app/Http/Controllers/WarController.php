@@ -8,7 +8,7 @@ use App\Exports\PlayersExport;
 use Maatwebsite\Excel\Facades\Excel;
 use Illuminate\Support\Facades\Http;
 use App\Services\DolarApiService; // Importamos el servicio
-
+use Illuminate\Support\Facades\Log;
 
 class WarController extends Controller
 {
@@ -46,7 +46,7 @@ class WarController extends Controller
 
         session(['selected_month' => $request->month, 'selected_year' => $request->year]);
         $weekColumn = $request->input('week');
-        $apiKey = 'K86510533188957'; // Asegúrate de usar tu clave correcta
+        $apiKey = env('API_KEY_EXTERNAL'); // Asegúrate de usar tu clave correcta
         $totalProcessed = 0;
         $jugadoresProcesados = [];
 
@@ -81,12 +81,17 @@ class WarController extends Controller
                         break;
                     }
                 } catch (\Exception $e) {
+                    // 👇 OPCIONAL PERO RECOMENDADO: Loguear cada intento fallido con el nombre del archivo
+                    $nombreArchivo = $image->getClientOriginalName();
+                    Log::warning("Intento {$intentoActual} fallido para la imagen '{$nombreArchivo}'. Motivo: " . $e->getMessage());
                     sleep(5);
                 }
             }
 
             if (!$ocrText) {
-                \Log::error("Una imagen fue rechazada por la API después de 4 intentos.");
+                // 👇 AHORA SÍ: Logueamos exactamente cuál fue la imagen que se rindió
+                $nombreArchivo = $image->getClientOriginalName();
+                Log::error("La imagen '{$nombreArchivo}' fue rechazada por la API después de {$maxIntentos} intentos y se omitió.");
                 continue;
             }
 
@@ -133,6 +138,27 @@ class WarController extends Controller
                 $nombre = trim($nombre);
                 $nombre = preg_replace('/^ID\s*/i', '', $nombre); // Quitamos el "ID"
                 $nombre = preg_replace('/^\d+\s*/', '', $nombre); // Quitamos número de ranking suelto
+
+                // ==========================================
+                // 🛠️ NUEVO: DICCIONARIO DE CORRECCIONES OCR
+                // ==========================================
+                // Aquí mapeamos los errores comunes del OCR a los nombres reales.
+                // IMPORTANTE: El lado izquierdo (el error) debe ir TODO EN MINÚSCULAS.
+                $correccionesOcr = [
+                    'atxena'       => 'athena',
+                    'tangel†'      => '†ANGEL†',
+                    'taid'         => '0964$aiD0964',
+                    'cer-x'        => 'Ger-X', // 👈 Fíjate, lado izquierdo 100% minúscula
+                ];
+
+                // Usamos mb_strtolower en lugar de strtolower para que soporte símbolos raros a la perfección
+                $nombreMinuscula = mb_strtolower($nombre, 'UTF-8');
+
+                if (array_key_exists($nombreMinuscula, $correccionesOcr)) {
+                    // Aquí le asigna el nombre real (Ger-X) con su mayúscula perfecta
+                    $nombre = $correccionesOcr[$nombreMinuscula];
+                }
+                // ==========================================
 
                 // Filtros
                 if (preg_match('/h\s*\d+\s*min/i', $nombre)) continue;
@@ -183,6 +209,6 @@ class WarController extends Controller
     public function clearDatabase()
     {
         Player::truncate();
-        return back()->with('success', '¡Base de datos reiniciada! Lista para una nueva temporada.');
+        return back()->with('success', '¡Datos borrados! Listo para una nueva temporada.');
     }
 }
