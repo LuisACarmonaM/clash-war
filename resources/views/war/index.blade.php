@@ -32,7 +32,6 @@
                     <label>Reporte de Temporada:</label>
                     <div style="display: flex; gap: 10px;">
 
-                        <!-- MES AUTOMÁTICO (Bono extra) -->
                         <select name="month" id="month" required style="flex: 2;">
                             @php
                                 $meses = [
@@ -49,7 +48,7 @@
                                     'Noviembre',
                                     'Diciembre',
                                 ];
-                                $mesActual = $meses[date('n') - 1]; // Obtiene el mes actual en español
+                                $mesActual = $meses[date('n') - 1];
                             @endphp
 
                             @foreach ($meses as $m)
@@ -59,16 +58,13 @@
                             @endforeach
                         </select>
 
-                        <!-- AÑO AUTOMÁTICO -->
                         <select name="year" id="year" required style="flex: 1;">
                             @php
                                 $currentYear = date('Y');
                             @endphp
 
-                            <!-- Año actual (seleccionado por defecto) -->
                             <option value="{{ $currentYear }}" selected>{{ $currentYear }}</option>
 
-                            <!-- Un año más en el futuro -->
                             <option value="{{ $currentYear + 1 }}">{{ $currentYear + 1 }}</option>
                         </select>
 
@@ -119,13 +115,11 @@
 
         <!-- Columna derecha - Calculadora -->
         <div class="sidebar">
-            <!-- ✅ La tasa se pasa como data attribute -->
             <div class="calculator-mini" data-tasa-dolar="{{ $tasasDolar['promedio'] ?? 0 }}">
                 <div class="calculator-title">
                     <h3 style="margin: 0;">💱 Conversor de Moneda</h3>
                 </div>
 
-                <!-- Conversor USD → Bs -->
                 <div class="calc-converter">
                     <label>💰 USD (Dólares)</label>
                     <input type="text" id="usdAmount" placeholder="0,00" value="1">
@@ -137,7 +131,6 @@
                     </div>
                 </div>
 
-                <!-- Conversor Bs → USD -->
                 <div class="calc-converter">
                     <label>🇻🇪 Bs. (Bolívares)</label>
                     <input type="text" id="bsAmount" placeholder="0,00" value="">
@@ -161,13 +154,11 @@
             </div>
         </div>
     </div>
-    <!-- Solo los scripts, sin código inline -->
     <script src="{{ asset('plugins/sweetalert2/sweetalert2.min.js') }}"></script>
     <script src="{{ asset('js/calculadora.js') }}"></script>
     <script src="{{ asset('js/clan-wars.js') }}"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function() {
-            // Si hay un mensaje de éxito desde el backend
             @if (session('success'))
                 Swal.fire({
                     title: '¡Completado!',
@@ -176,19 +167,15 @@
                     confirmButtonText: 'Genial',
                     confirmButtonColor: '#27ae60'
                 }).then((result) => {
-                    // 👇 ESTO OCURRE AL DARLE CLIC A "GENIAL" 👇
                     if (result.isConfirmed) {
-                        // Limpiamos el formulario para que quede en blanco
                         document.getElementById('uploadForm').reset();
 
-                        // Y limpiamos el textito azul de "X imágenes seleccionadas"
                         const fileCount = document.getElementById('file-count');
                         if (fileCount) fileCount.textContent = '';
                     }
                 });
             @endif
 
-            // Si hay errores desde el backend (ej. falló la API, no subió fotos)
             @if ($errors->any())
                 let errorMessages = '';
                 @foreach ($errors->all() as $error)

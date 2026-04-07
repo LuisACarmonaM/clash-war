@@ -11,7 +11,6 @@ class PlayersExport implements FromCollection, WithHeadings, WithMapping
 {
     public function collection()
     {
-        // En PostgreSQL usamos COALESCE en lugar de IFNULL
         return Player::orderByRaw('(COALESCE(week_1, 0) + COALESCE(week_2, 0) + COALESCE(week_3, 0) + COALESCE(week_4, 0) + COALESCE(week_5, 0)) DESC')->get();
     }
 
@@ -30,7 +29,6 @@ class PlayersExport implements FromCollection, WithHeadings, WithMapping
 
     public function map($player): array
     {
-        // Calculamos el total de la fila
         $total = $player->week_1 + $player->week_2 + $player->week_3 +
             $player->week_4 + $player->week_5;
 
@@ -41,7 +39,7 @@ class PlayersExport implements FromCollection, WithHeadings, WithMapping
             $player->week_3,
             $player->week_4,
             $player->week_5,
-            $total // La suma final que pediste
+            $total
         ];
     }
 }

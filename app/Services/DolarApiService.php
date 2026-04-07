@@ -12,7 +12,7 @@ class DolarApiService
     public function __construct()
     {
         $this->client = new Client([
-            'base_uri' => 'https://ve.dolarapi.com/', // ← Asegúrate que termine con slash
+            'base_uri' => 'https://ve.dolarapi.com/',
             'timeout' => 10,
             'verify' => false,
         ]);
@@ -21,7 +21,6 @@ class DolarApiService
     public function getTasas()
     {
         try {
-            // Ahora usa 'v1/tasas' sin el slash inicial
             $response = $this->client->get('v1/dolares/oficial');
 
             if ($response->getStatusCode() == 200) {

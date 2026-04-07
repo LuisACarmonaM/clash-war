@@ -7,14 +7,13 @@ use App\Models\Player;
 use App\Exports\PlayersExport;
 use Maatwebsite\Excel\Facades\Excel;
 use Illuminate\Support\Facades\Http;
-use App\Services\DolarApiService; // Importamos el servicio
+use App\Services\DolarApiService;
 use Illuminate\Support\Facades\Log;
 
 class WarController extends Controller
 {
     protected $dolarApi;
 
-    // Inyectamos el servicio en el constructor
     public function __construct(DolarApiService $dolarApi)
     {
         $this->dolarApi = $dolarApi;
@@ -22,11 +21,9 @@ class WarController extends Controller
 
     public function index()
     {
-        // Obtener datos de la API del dólar
         $tasasDolar = $this->dolarApi->getTasas();
         $estadoApi = $this->dolarApi->getEstado();
         //dd($tasasDolar);
-        // Pasar los datos a la vista
         return view('war.index', [
             'tasasDolar' => $tasasDolar,
             'estadoApi' => $estadoApi
@@ -46,14 +43,14 @@ class WarController extends Controller
 
         session(['selected_month' => $request->month, 'selected_year' => $request->year]);
         $weekColumn = $request->input('week');
-        $apiKey = env('API_KEY_EXTERNAL'); // Asegúrate de usar tu clave correcta
+        $apiKey = env('API_KEY_EXTERNAL');
         $totalProcessed = 0;
         $jugadoresProcesados = [];
 
         foreach ($request->file('war_images') as $image) {
 
             // 1. SISTEMA DE REINTENTOS MÁS AGRESIVO
-            $maxIntentos = 4; // Subimos a 4 intentos por imagen
+            $maxIntentos = 4;
             $intentoActual = 0;
             $ocrText = null;
 
@@ -70,7 +67,6 @@ class WarController extends Controller
 
                     $result = $response->json();
 
-                    // Si la API falla, nos bloquea, o no devuelve resultados, esperamos 5 segundos y reintentamos
                     if ($response->failed() || !isset($result['ParsedResults']) || (isset($result['IsErroredOnProcessing']) && $result['IsErroredOnProcessing'] === true)) {
                         sleep(5);
                         continue;
@@ -81,7 +77,6 @@ class WarController extends Controller
                         break;
                     }
                 } catch (\Exception $e) {
-                    // 👇 OPCIONAL PERO RECOMENDADO: Loguear cada intento fallido con el nombre del archivo
                     $nombreArchivo = $image->getClientOriginalName();
                     Log::warning("Intento {$intentoActual} fallido para la imagen '{$nombreArchivo}'. Motivo: " . $e->getMessage());
                     sleep(5);
@@ -89,7 +84,6 @@ class WarController extends Controller
             }
 
             if (!$ocrText) {
-                // 👇 AHORA SÍ: Logueamos exactamente cuál fue la imagen que se rindió
                 $nombreArchivo = $image->getClientOriginalName();
                 Log::error("La imagen '{$nombreArchivo}' fue rechazada por la API después de {$maxIntentos} intentos y se omitió.");
                 continue;
@@ -133,29 +127,25 @@ class WarController extends Controller
                     $puntos = 0;
                 }
 
-                // 👇 AQUI ESTÁ LA MAGIA DE LA LIMPIEZA 👇
-                $nombre = str_replace(['*', '_', '~'], '', $nombre); // Destruimos basura de Markdown (asteriscos)
+                $nombre = str_replace(['*', '_', '~'], '', $nombre);
                 $nombre = trim($nombre);
-                $nombre = preg_replace('/^ID\s*/i', '', $nombre); // Quitamos el "ID"
-                $nombre = preg_replace('/^\d+\s*/', '', $nombre); // Quitamos número de ranking suelto
+                $nombre = preg_replace('/^ID\s*/i', '', $nombre);
+                $nombre = preg_replace('/^\d+\s*/', '', $nombre);
 
                 // ==========================================
                 // 🛠️ NUEVO: DICCIONARIO DE CORRECCIONES OCR
                 // ==========================================
-                // Aquí mapeamos los errores comunes del OCR a los nombres reales.
-                // IMPORTANTE: El lado izquierdo (el error) debe ir TODO EN MINÚSCULAS.
+
                 $correccionesOcr = [
                     'atxena'       => 'athena',
                     'tangel†'      => '†ANGEL†',
                     'taid'         => '0964$aiD0964',
-                    'cer-x'        => 'Ger-X', // 👈 Fíjate, lado izquierdo 100% minúscula
+                    'cer-x'        => 'Ger-X',
                 ];
 
-                // Usamos mb_strtolower en lugar de strtolower para que soporte símbolos raros a la perfección
                 $nombreMinuscula = mb_strtolower($nombre, 'UTF-8');
 
                 if (array_key_exists($nombreMinuscula, $correccionesOcr)) {
-                    // Aquí le asigna el nombre real (Ger-X) con su mayúscula perfecta
                     $nombre = $correccionesOcr[$nombreMinuscula];
                 }
                 // ==========================================
@@ -165,7 +155,6 @@ class WarController extends Controller
                 if (in_array(strtolower($nombre), $prohibitedWords)) continue;
                 if (is_numeric($nombre) || strlen($nombre) < 2) continue;
 
-                // Lo metemos al arreglo
                 $jugadoresEnEstaImagen[$nombre] = $puntos;
             }
 
@@ -183,11 +172,8 @@ class WarController extends Controller
                 $count++;
             }
 
-            // Pausa obligatoria de 4 segundos entre imágenes exitosas para no enojar a la API
             sleep(4);
         }
-
-        // Puedes dejar esto para ver la magia de la extracción perfecta
 
         //dd($result, $jugadoresProcesados);
         if ($totalProcessed === 0) {

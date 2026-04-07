@@ -5,19 +5,15 @@
 let tasaActual = 0;
 let calculadoraInicializada = false;
 
-// Función para obtener la tasa desde el atributo data del contenedor
 function obtenerTasaDesdeDataAttribute() {
     const calculadoraElement = document.querySelector(".calculator-mini");
     if (calculadoraElement && calculadoraElement.dataset.tasaDolar) {
         const tasa = parseFloat(calculadoraElement.dataset.tasaDolar);
-        //console.log("✅ Tasa obtenida del data attribute:", tasa);
         return tasa;
     }
-    //console.error("❌ No se encontró el atributo data-tasa-dolar");
     return 0;
 }
 
-// Función para limpiar el formato y obtener número
 function limpiarFormato(valorFormateado) {
     if (valorFormateado === "" || valorFormateado === null) return 0;
 
@@ -30,7 +26,6 @@ function limpiarFormato(valorFormateado) {
     return numero;
 }
 
-// Función para formatear número con 4 decimales (MÁS PRECISO)
 function formatearNumero(numero, decimales = 4) {
     if (
         numero === "" ||
@@ -46,7 +41,6 @@ function formatearNumero(numero, decimales = 4) {
     });
 }
 
-// Función para formatear input mientras se escribe
 function formatearInput(input) {
     let valor = input.value;
     let cursorPos = input.selectionStart;
@@ -68,17 +62,14 @@ function formatearInput(input) {
     }
 }
 
-// Función para inicializar la calculadora
 function inicializarCalculadora() {
     if (calculadoraInicializada) {
-        //console.log("Calculadora ya inicializada");
         return;
     }
 
     tasaActual = obtenerTasaDesdeDataAttribute();
 
     if (tasaActual === 0) {
-        //console.error("No se pudo obtener la tasa del dólar");
         return;
     }
 
@@ -88,28 +79,21 @@ function inicializarCalculadora() {
     const resultUsdDiv = document.getElementById("resultUsd");
 
     if (!usdInput || !bsInput || !resultBsDiv || !resultUsdDiv) {
-        //console.error("No se encontraron los elementos de la calculadora");
         return;
     }
 
-    // Convertir de USD a Bs. (muestra 2 decimales)
     function convertirUSDaBs() {
         let valorUSD = limpiarFormato(usdInput.value);
         let resultadoBs = valorUSD * tasaActual;
-        // Para bolívares, mostrar 2 decimales
         resultBsDiv.innerHTML = `Bs. ${formatearNumero(resultadoBs, 2)}`;
-        //console.log(`USD: ${valorUSD} → Bs: ${resultadoBs}`);
     }
 
-    // Convertir de Bs. a USD (muestra 4 o 6 decimales para precisión)
     function convertirBsaUSD() {
         let valorBs = limpiarFormato(bsInput.value);
         let resultadoUSD = valorBs / tasaActual;
         if (isNaN(resultadoUSD)) resultadoUSD = 0;
-        // Para dólares, mostrar 4 decimales (o 6 si es menor a 0.01)
         let decimales = resultadoUSD < 0.01 ? 6 : 4;
         resultUsdDiv.innerHTML = `$ ${formatearNumero(resultadoUSD, decimales)}`;
-        //console.log(`Bs: ${valorBs} → USD: ${resultadoUSD}`);
     }
 
     // Limpiar todo
@@ -170,7 +154,6 @@ function inicializarCalculadora() {
     resultUsdDiv.innerHTML = `$ 0,0000`;
 
     calculadoraInicializada = true;
-    //console.log("✅ Calculadora inicializada correctamente con tasa:",tasaActual,);
 }
 
 // Auto-inicializar

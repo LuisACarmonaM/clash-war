@@ -11,10 +11,8 @@ document.addEventListener("DOMContentLoaded", function () {
 
     if (formLimpiar) {
         formLimpiar.addEventListener("submit", function (event) {
-            // Detiene el envío automático del formulario
             event.preventDefault();
 
-            // Lanza el SweetAlert
             Swal.fire({
                 title: "⚠️ ¿Borrar todos los datos?",
                 text: "Esta acción no se puede deshacer.",
@@ -24,11 +22,10 @@ document.addEventListener("DOMContentLoaded", function () {
                 cancelButtonColor: "#3085d6",
                 confirmButtonText: "Limpiar",
                 cancelButtonText: "Cancelar",
-                background: "#fff", // Puedes cambiar el color de fondo si tienes modo oscuro
+                background: "#fff",
             }).then((result) => {
-                // Si el usuario hace clic en "Sí"
                 if (result.isConfirmed) {
-                    formLimpiar.submit(); // Ahora sí envía el formulario a la ruta de Laravel
+                    formLimpiar.submit();
                 }
             });
         });
@@ -43,12 +40,10 @@ document.addEventListener("DOMContentLoaded", function () {
 
     if (uploadForm) {
         uploadForm.addEventListener("submit", function (event) {
-            // Verificamos si el formulario es válido (que haya subido fotos, elegido semana, etc)
             if (!uploadForm.checkValidity()) {
-                return; // Si falta algo, dejamos que el navegador muestre sus alertas normales
+                return;
             }
 
-            // Lanzamos el SweetAlert de carga
             Swal.fire({
                 title: "⏳ Procesando Imágenes...",
                 html: "Por favor no cierres esta ventana.<br>El sistema está leyendo los puntos línea por línea.",
@@ -59,9 +54,6 @@ document.addEventListener("DOMContentLoaded", function () {
                     Swal.showLoading(); // Activa la animación del círculo girando
                 },
             });
-
-            // Nota: No usamos event.preventDefault() aquí,
-            // así que el formulario seguirá su viaje a Laravel de forma normal por detrás.
         });
     }
 });
