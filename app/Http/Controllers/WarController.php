@@ -46,14 +46,14 @@ class WarController extends Controller
 
         session(['selected_month' => $request->month, 'selected_year' => $request->year]);
         $weekColumn = $request->input('week');
-        $apiKey = env('API_KEY_EXTERNAL');
+        $apiKey = 'K86510533188957'; // Asegúrate de usar tu clave correcta
         $totalProcessed = 0;
         $jugadoresProcesados = [];
 
         foreach ($request->file('war_images') as $image) {
 
-            // 1. SISTEMA DE REINTENTOS PARA LA API
-            $maxIntentos = 3;
+            // 1. SISTEMA DE REINTENTOS MÁS AGRESIVO
+            $maxIntentos = 4; // Subimos a 4 intentos por imagen
             $intentoActual = 0;
             $ocrText = null;
 
@@ -70,8 +70,9 @@ class WarController extends Controller
 
                     $result = $response->json();
 
-                    if (isset($result['IsErroredOnProcessing']) && $result['IsErroredOnProcessing'] === true) {
-                        sleep(3);
+                    // Si la API falla, nos bloquea, o no devuelve resultados, esperamos 5 segundos y reintentamos
+                    if ($response->failed() || !isset($result['ParsedResults']) || (isset($result['IsErroredOnProcessing']) && $result['IsErroredOnProcessing'] === true)) {
+                        sleep(5);
                         continue;
                     }
 
@@ -80,28 +81,27 @@ class WarController extends Controller
                         break;
                     }
                 } catch (\Exception $e) {
-                    sleep(3);
+                    sleep(5);
                 }
             }
 
-            if (!$ocrText) continue;
+            if (!$ocrText) {
+                \Log::error("Una imagen fue rechazada por la API después de 4 intentos.");
+                continue;
+            }
 
-            // 2. NUEVA LÓGICA DE EXTRACCIÓN POR COLUMNAS (A prueba de balas)
+            // 2. EXTRACCIÓN POR COLUMNAS
             $jugadoresEnEstaImagen = [];
             $prohibitedWords = ['---', 'rank', 'user', 'name', 'points', 'vale', 'detalles', 'guerra', 'batalla', 'id'];
 
-            // Cortamos el texto gigante en líneas individuales
             $lineas = explode("\n", $ocrText);
 
             foreach ($lineas as $linea) {
-                // Si la línea no tiene una barra "|", no es de la tabla
                 if (strpos($linea, '|') === false) continue;
 
-                // Cortamos la línea por las barras
                 $columnasCrudas = explode('|', $linea);
                 $columnas = [];
 
-                // Limpiamos espacios vacíos y columnas inútiles
                 foreach ($columnasCrudas as $col) {
                     $limpio = trim($col);
                     if ($limpio !== '' && !preg_match('/^[-:\s]+$/', $limpio)) {
@@ -115,41 +115,35 @@ class WarController extends Controller
                 $nombre = '';
                 $puntos = 0;
 
-                // Analizamos de derecha a izquierda:
                 $ultimaColumna = strtolower($columnas[$cantidadColumnas - 1]);
-
-                // Si el OCR confundió un 0 con la letra 'O'
                 if ($ultimaColumna === 'o') $ultimaColumna = '0';
 
-                // Si la última columna es un número, son los puntos.
                 if (is_numeric(preg_replace('/[^0-9]/', '', $ultimaColumna))) {
                     $puntos = (int) preg_replace('/[^0-9]/', '', $ultimaColumna);
                     if ($cantidadColumnas >= 2) {
-                        $nombre = $columnas[$cantidadColumnas - 2]; // El nombre es el anterior
+                        $nombre = $columnas[$cantidadColumnas - 2];
                     }
                 } else {
-                    // Si no hay número al final, significa que el OCR se saltó los puntos
-                    $nombre = $columnas[$cantidadColumnas - 1]; // La última columna es el nombre
+                    $nombre = $columnas[$cantidadColumnas - 1];
                     $puntos = 0;
                 }
 
-                // --- LIMPIEZA FINAL DEL NOMBRE ---
+                // 👇 AQUI ESTÁ LA MAGIA DE LA LIMPIEZA 👇
+                $nombre = str_replace(['*', '_', '~'], '', $nombre); // Destruimos basura de Markdown (asteriscos)
                 $nombre = trim($nombre);
-                $nombre = preg_replace('/^ID\s+/i', '', $nombre); // Quitamos el "ID "
-                $nombre = preg_replace('/^\d+\s+/', '', $nombre); // Quitamos si se coló un número de ranking
+                $nombre = preg_replace('/^ID\s*/i', '', $nombre); // Quitamos el "ID"
+                $nombre = preg_replace('/^\d+\s*/', '', $nombre); // Quitamos número de ranking suelto
 
-                // --- FILTROS ---
-                // Ignoramos la línea de "19 h 24 min"
+                // Filtros
                 if (preg_match('/h\s*\d+\s*min/i', $nombre)) continue;
-
                 if (in_array(strtolower($nombre), $prohibitedWords)) continue;
                 if (is_numeric($nombre) || strlen($nombre) < 2) continue;
 
-                // ¡Aprobado! Lo metemos al arreglo
+                // Lo metemos al arreglo
                 $jugadoresEnEstaImagen[$nombre] = $puntos;
             }
 
-            // 3. GUARDADO EN BASE DE DATOS
+            // 3. GUARDADO (Actualiza si existe, crea si no existe)
             $count = 0;
             foreach ($jugadoresEnEstaImagen as $nombre => $puntos) {
                 if ($count >= 9) break;
@@ -163,17 +157,18 @@ class WarController extends Controller
                 $count++;
             }
 
-            sleep(2); // Pausa de cortesía entre imágenes
+            // Pausa obligatoria de 4 segundos entre imágenes exitosas para no enojar a la API
+            sleep(4);
         }
 
         // Puedes dejar esto para ver la magia de la extracción perfecta
-        //dd($result, $jugadoresProcesados);
 
+        //dd($result, $jugadoresProcesados);
         if ($totalProcessed === 0) {
-            return back()->withErrors(['war_images' => 'No se detectaron datos. Asegúrate de que las capturas sean claras.']);
+            return back()->withErrors(['war_images' => 'No se detectaron datos. API saturada.']);
         }
 
-        return back()->with('success', "¡Éxito! Se procesaron las imágenes y se actualizaron $totalProcessed registros.")
+        return back()->with('success', "¡Éxito! Se actualizaron $totalProcessed registros.")
             ->with('jugadores', $jugadoresProcesados);
     }
     public function downloadExcel()
