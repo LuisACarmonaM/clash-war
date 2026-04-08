@@ -142,22 +142,30 @@ class WarController extends Controller
                     'tangel†'      => '†ANGEL†',
                     'taid'         => '0964$aiD0964',
                     'cer-x'        => 'Ger-X',
-                    '0964'         => '0964$aiD0964', // Nuestro jugador problemático
+                    '0964'         => '0964$aiD0964',
+                    'josefero4'    => 'JosefeR04',
+                    'bl4gkfy4h'    => 'BL4CKFY4H',
+                    'josé kieber'  => 'José kleber',
+                    'hama_yt'      => 'Hàma_YT',
+                    'hàmà_yt'      => 'Hàma_YT',
+                    'gr-raj'       => 'CR-RAJ',
+                    'john wick'    => 'john wick',
                 ];
 
                 $nombreMinuscula = mb_strtolower($nombre, 'UTF-8');
 
                 if (array_key_exists($nombreMinuscula, $correccionesOcr)) {
-                    // Si el OCR leyó algo del diccionario, lo arreglamos y SALTAMOS la limpieza de números
                     $nombre = $correccionesOcr[$nombreMinuscula];
                 } else {
-                    // Si NO está en el diccionario, borramos los números de posición al inicio (ej. "28 Bills" -> "Bills")
                     $nombre = preg_replace('/^\d+\s*/', '', $nombre);
                     $nombre = trim($nombre);
                 }
 
                 // --- 3. Filtros finales ---
                 if (preg_match('/h\s*\d+\s*min/i', $nombre)) continue;
+                if (stripos($nombre, 'entrenamiento') !== false) continue; // 👈 BALA DE PLATA
+                if (stripos($nombre, 'dia de') !== false) continue;        // 👈 BALA DE PLATA
+                if (stripos($nombre, 'día de') !== false) continue;        // 👈 BALA DE PLATA
                 if (in_array(strtolower($nombre), $prohibitedWords)) continue;
                 if (is_numeric($nombre) || strlen($nombre) < 2) continue;
 
@@ -165,44 +173,100 @@ class WarController extends Controller
             }
 
             // ==========================================
-            // 🆘 PLAN B: Formato de Lista (Si no hubo barras '|')
+            // 🆘 PLAN B: Formato de Lista (Texto arriba, número abajo)
             // ==========================================
             if (empty($jugadoresEnEstaImagen)) {
-                // Regex para buscar "Texto arriba, número abajo"
                 preg_match_all('/^(.+)\r?\n\s*(\d{1,4})\s*$/mi', $ocrText, $matchesPlanB, PREG_SET_ORDER);
 
                 foreach ($matchesPlanB as $match) {
                     $nombre = trim($match[1]);
                     $puntos = (int) $match[2];
 
-                    // --- 1. Limpieza inicial ---
                     $nombre = str_replace(['*', '_', '~'], '', $nombre);
                     $nombre = trim($nombre);
                     $nombre = preg_replace('/^ID\s*/i', '', $nombre);
                     $nombre = trim($nombre);
 
-                    // --- 2. DICCIONARIO DE CORRECCIONES ---
                     $correccionesOcr = [
                         'atxena'       => 'athena',
                         'tangel†'      => '†ANGEL†',
                         'taid'         => '0964$aiD0964',
                         'cer-x'        => 'Ger-X',
-                        '0964'         => '0964$aiD0964', // Nuestro jugador problemático
+                        '0964'         => '0964$aiD0964',
+                        'josefero4'    => 'JosefeR04',
+                        'bl4gkfy4h'    => 'BL4CKFY4H',
+                        'josé kieber'  => 'José kleber',
+                        'hama_yt'      => 'Hàma_YT',
+                        'hàmà_yt'      => 'Hàma_YT',
+                        'gr-raj'       => 'CR-RAJ',
+                        'john wick'    => 'john wick',
                     ];
 
                     $nombreMinuscula = mb_strtolower($nombre, 'UTF-8');
 
                     if (array_key_exists($nombreMinuscula, $correccionesOcr)) {
-                        // Si el OCR leyó algo del diccionario, lo arreglamos y SALTAMOS la limpieza de números
                         $nombre = $correccionesOcr[$nombreMinuscula];
                     } else {
-                        // Si NO está en el diccionario, borramos los números de posición al inicio
                         $nombre = preg_replace('/^\d+\s*/', '', $nombre);
                         $nombre = trim($nombre);
                     }
 
                     // --- 3. Filtros finales ---
                     if (preg_match('/h\s*\d+\s*min/i', $nombre)) continue;
+                    if (stripos($nombre, 'entrenamiento') !== false) continue; // 👈 BALA DE PLATA (Ya añadida)
+                    if (stripos($nombre, 'dia de') !== false) continue;        // 👈 BALA DE PLATA (Ya añadida)
+                    if (stripos($nombre, 'día de') !== false) continue;        // 👈 BALA DE PLATA (Ya añadida)
+                    if (in_array(strtolower($nombre), $prohibitedWords)) continue;
+                    if (is_numeric($nombre) || strlen($nombre) < 2) continue;
+
+                    $jugadoresEnEstaImagen[$nombre] = $puntos;
+                }
+            }
+
+            // ==========================================
+            // 🚨 PLAN C: Formato de Línea Única (Ranking ID Nombre Puntos)
+            // ==========================================
+            if (empty($jugadoresEnEstaImagen)) {
+                preg_match_all('/^(?:\d+\s+)?(?:ID\s+)?(.+?)\s+(\d{1,4})$/mi', $ocrText, $matchesPlanC, PREG_SET_ORDER);
+
+                foreach ($matchesPlanC as $match) {
+                    $nombre = trim($match[1]);
+                    $puntos = (int) $match[2];
+
+                    $nombre = str_replace(['*', '_', '~'], '', $nombre);
+                    $nombre = trim($nombre);
+                    $nombre = preg_replace('/^ID\s*/i', '', $nombre);
+                    $nombre = trim($nombre);
+
+                    $correccionesOcr = [
+                        'atxena'       => 'athena',
+                        'tangel†'      => '†ANGEL†',
+                        'taid'         => '0964$aiD0964',
+                        'cer-x'        => 'Ger-X',
+                        '0964'         => '0964$aiD0964',
+                        'josefero4'    => 'JosefeR04',
+                        'bl4gkfy4h'    => 'BL4CKFY4H',
+                        'josé kieber'  => 'José kleber',
+                        'hama_yt'      => 'Hàma_YT',
+                        'hàmà_yt'      => 'Hàma_YT',
+                        'gr-raj'       => 'CR-RAJ',
+                        'john wick'    => 'john wick',
+                    ];
+
+                    $nombreMinuscula = mb_strtolower($nombre, 'UTF-8');
+
+                    if (array_key_exists($nombreMinuscula, $correccionesOcr)) {
+                        $nombre = $correccionesOcr[$nombreMinuscula];
+                    } else {
+                        $nombre = preg_replace('/^\d+\s*/', '', $nombre);
+                        $nombre = trim($nombre);
+                    }
+
+                    // --- 3. Filtros finales ---
+                    if (preg_match('/h\s*\d+\s*min/i', $nombre)) continue;
+                    if (stripos($nombre, 'entrenamiento') !== false) continue; // 👈 BALA DE PLATA (Ya añadida)
+                    if (stripos($nombre, 'dia de') !== false) continue;        // 👈 BALA DE PLATA (Ya añadida)
+                    if (stripos($nombre, 'día de') !== false) continue;        // 👈 BALA DE PLATA (Ya añadida)
                     if (in_array(strtolower($nombre), $prohibitedWords)) continue;
                     if (is_numeric($nombre) || strlen($nombre) < 2) continue;
 
