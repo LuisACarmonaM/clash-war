@@ -94,16 +94,73 @@ class WarController extends Controller
             $prohibitedWords = ['---', 'rank', 'user', 'name', 'points', 'vale', 'detalles', 'guerra', 'batalla', 'id'];
 
             // ==========================================
+            // 🧠 MOTOR CENTRAL DE LIMPIEZA Y DICCIONARIO
+            // (Se define una sola vez y se usa en los 3 planes)
+            // ==========================================
+            $correccionesOcr = [
+                'atxena'           => 'athena',
+                'tangel†'          => '†ANGEL†',
+                'taid'             => '0964$aiD0964',
+                '0964'             => '0964$aiD0964',
+                'said 0964'        => '0964$aiD0964',
+                '0964 said 0964'   => '0964$aiD0964',
+                'cer-x'            => 'Ger-X',
+                'josefero4'        => 'JosefeR04',
+                'bl4gkfy4h'        => 'BL4CKFY4H',
+                'josé kieber'      => 'José kleber',
+                'hama_yt'          => 'Hàma_YT',
+                'hàmà_yt'          => 'Hàma_YT',
+                'hamayt'           => 'Hàma_YT',
+                'hàmáyt'           => 'Hàma_YT',
+                'gr-raj'           => 'CR-RAJ',
+                'john wick'        => 'john wick',
+                'byarman27xx'      => 'ByARman27Xx',
+                'drago'            => 'dRago',
+                'biskuji'          => 'Biskuii',
+                '23 biskuji'          => 'Biskuii',
+                '-1 ihident i-'    => '-| iHidenT |-',
+                '-1 ihiddent -'    => '-| iHidenT |-',
+            ];
+
+            // Esta función recibe el nombre sucio y devuelve el nombre perfecto (o "false" si es basura)
+            $limpiarYFiltrar = function ($nombreCrudo) use ($correccionesOcr, $prohibitedWords) {
+                // Limpieza inicial
+                $nombre = str_replace(['*', '_', '~'], '', $nombreCrudo);
+                $nombre = trim($nombre);
+                $nombre = preg_replace('/^ID\s*/i', '', $nombre);
+                $nombre = trim($nombre);
+
+                // Diccionario
+                $nombreMinuscula = mb_strtolower($nombre, 'UTF-8');
+                if (array_key_exists($nombreMinuscula, $correccionesOcr)) {
+                    $nombre = $correccionesOcr[$nombreMinuscula];
+                } else {
+                    $nombre = preg_replace('/^\d+\s*/', '', $nombre);
+                    $nombre = trim($nombre);
+                }
+
+                // Filtros finales (Balas de Plata)
+                if (preg_match('/h\s*\d+\s*min/i', $nombre)) return false;
+                if (stripos($nombre, 'entrenamiento') !== false) return false;
+                if (stripos($nombre, 'dia de') !== false) return false;
+                if (stripos($nombre, 'día de') !== false) return false;
+                if (in_array(strtolower($nombre), $prohibitedWords)) return false;
+                if (is_numeric($nombre) || strlen($nombre) < 2) return false;
+
+                return $nombre; // Si sobrevivió a todo, devolvemos el nombre limpio
+            };
+            // ==========================================
+
+
+            // ==========================================
             // PLAN A: Formato de Tabla (Busca barras '|')
             // ==========================================
             $lineas = explode("\n", $ocrText);
-
             foreach ($lineas as $linea) {
                 if (strpos($linea, '|') === false) continue;
 
                 $columnasCrudas = explode('|', $linea);
                 $columnas = [];
-
                 foreach ($columnasCrudas as $col) {
                     $limpio = trim($col);
                     if ($limpio !== '' && !preg_match('/^[-:\s]+$/', $limpio)) {
@@ -114,7 +171,7 @@ class WarController extends Controller
                 $cantidadColumnas = count($columnas);
                 if ($cantidadColumnas == 0) continue;
 
-                $nombre = '';
+                $nombreSucio = '';
                 $puntos = 0;
 
                 $ultimaColumna = strtolower($columnas[$cantidadColumnas - 1]);
@@ -122,54 +179,16 @@ class WarController extends Controller
 
                 if (is_numeric(preg_replace('/[^0-9]/', '', $ultimaColumna))) {
                     $puntos = (int) preg_replace('/[^0-9]/', '', $ultimaColumna);
-                    if ($cantidadColumnas >= 2) {
-                        $nombre = $columnas[$cantidadColumnas - 2];
-                    }
+                    if ($cantidadColumnas >= 2) $nombreSucio = $columnas[$cantidadColumnas - 2];
                 } else {
-                    $nombre = $columnas[$cantidadColumnas - 1];
-                    $puntos = 0;
+                    $nombreSucio = $columnas[$cantidadColumnas - 1];
                 }
 
-                // --- 1. Limpieza inicial ---
-                $nombre = str_replace(['*', '_', '~'], '', $nombre);
-                $nombre = trim($nombre);
-                $nombre = preg_replace('/^ID\s*/i', '', $nombre);
-                $nombre = trim($nombre);
-
-                // --- 2. DICCIONARIO DE CORRECCIONES ---
-                $correccionesOcr = [
-                    'atxena'       => 'athena',
-                    'tangel†'      => '†ANGEL†',
-                    'taid'         => '0964$aiD0964',
-                    'cer-x'        => 'Ger-X',
-                    '0964'         => '0964$aiD0964',
-                    'josefero4'    => 'JosefeR04',
-                    'bl4gkfy4h'    => 'BL4CKFY4H',
-                    'josé kieber'  => 'José kleber',
-                    'hama_yt'      => 'Hàma_YT',
-                    'hàmà_yt'      => 'Hàma_YT',
-                    'gr-raj'       => 'CR-RAJ',
-                    'john wick'    => 'john wick',
-                ];
-
-                $nombreMinuscula = mb_strtolower($nombre, 'UTF-8');
-
-                if (array_key_exists($nombreMinuscula, $correccionesOcr)) {
-                    $nombre = $correccionesOcr[$nombreMinuscula];
-                } else {
-                    $nombre = preg_replace('/^\d+\s*/', '', $nombre);
-                    $nombre = trim($nombre);
+                // Mandamos el nombre al Motor Central
+                $nombrePerfecto = $limpiarYFiltrar($nombreSucio);
+                if ($nombrePerfecto !== false) {
+                    $jugadoresEnEstaImagen[$nombrePerfecto] = $puntos;
                 }
-
-                // --- 3. Filtros finales ---
-                if (preg_match('/h\s*\d+\s*min/i', $nombre)) continue;
-                if (stripos($nombre, 'entrenamiento') !== false) continue; // 👈 BALA DE PLATA
-                if (stripos($nombre, 'dia de') !== false) continue;        // 👈 BALA DE PLATA
-                if (stripos($nombre, 'día de') !== false) continue;        // 👈 BALA DE PLATA
-                if (in_array(strtolower($nombre), $prohibitedWords)) continue;
-                if (is_numeric($nombre) || strlen($nombre) < 2) continue;
-
-                $jugadoresEnEstaImagen[$nombre] = $puntos;
             }
 
             // ==========================================
@@ -177,49 +196,15 @@ class WarController extends Controller
             // ==========================================
             if (empty($jugadoresEnEstaImagen)) {
                 preg_match_all('/^(.+)\r?\n\s*(\d{1,4})\s*$/mi', $ocrText, $matchesPlanB, PREG_SET_ORDER);
-
                 foreach ($matchesPlanB as $match) {
-                    $nombre = trim($match[1]);
+                    $nombreSucio = trim($match[1]);
                     $puntos = (int) $match[2];
 
-                    $nombre = str_replace(['*', '_', '~'], '', $nombre);
-                    $nombre = trim($nombre);
-                    $nombre = preg_replace('/^ID\s*/i', '', $nombre);
-                    $nombre = trim($nombre);
-
-                    $correccionesOcr = [
-                        'atxena'       => 'athena',
-                        'tangel†'      => '†ANGEL†',
-                        'taid'         => '0964$aiD0964',
-                        'cer-x'        => 'Ger-X',
-                        '0964'         => '0964$aiD0964',
-                        'josefero4'    => 'JosefeR04',
-                        'bl4gkfy4h'    => 'BL4CKFY4H',
-                        'josé kieber'  => 'José kleber',
-                        'hama_yt'      => 'Hàma_YT',
-                        'hàmà_yt'      => 'Hàma_YT',
-                        'gr-raj'       => 'CR-RAJ',
-                        'john wick'    => 'john wick',
-                    ];
-
-                    $nombreMinuscula = mb_strtolower($nombre, 'UTF-8');
-
-                    if (array_key_exists($nombreMinuscula, $correccionesOcr)) {
-                        $nombre = $correccionesOcr[$nombreMinuscula];
-                    } else {
-                        $nombre = preg_replace('/^\d+\s*/', '', $nombre);
-                        $nombre = trim($nombre);
+                    // Mandamos el nombre al Motor Central
+                    $nombrePerfecto = $limpiarYFiltrar($nombreSucio);
+                    if ($nombrePerfecto !== false) {
+                        $jugadoresEnEstaImagen[$nombrePerfecto] = $puntos;
                     }
-
-                    // --- 3. Filtros finales ---
-                    if (preg_match('/h\s*\d+\s*min/i', $nombre)) continue;
-                    if (stripos($nombre, 'entrenamiento') !== false) continue; // 👈 BALA DE PLATA (Ya añadida)
-                    if (stripos($nombre, 'dia de') !== false) continue;        // 👈 BALA DE PLATA (Ya añadida)
-                    if (stripos($nombre, 'día de') !== false) continue;        // 👈 BALA DE PLATA (Ya añadida)
-                    if (in_array(strtolower($nombre), $prohibitedWords)) continue;
-                    if (is_numeric($nombre) || strlen($nombre) < 2) continue;
-
-                    $jugadoresEnEstaImagen[$nombre] = $puntos;
                 }
             }
 
@@ -228,49 +213,15 @@ class WarController extends Controller
             // ==========================================
             if (empty($jugadoresEnEstaImagen)) {
                 preg_match_all('/^(?:\d+\s+)?(?:ID\s+)?(.+?)\s+(\d{1,4})$/mi', $ocrText, $matchesPlanC, PREG_SET_ORDER);
-
                 foreach ($matchesPlanC as $match) {
-                    $nombre = trim($match[1]);
+                    $nombreSucio = trim($match[1]);
                     $puntos = (int) $match[2];
 
-                    $nombre = str_replace(['*', '_', '~'], '', $nombre);
-                    $nombre = trim($nombre);
-                    $nombre = preg_replace('/^ID\s*/i', '', $nombre);
-                    $nombre = trim($nombre);
-
-                    $correccionesOcr = [
-                        'atxena'       => 'athena',
-                        'tangel†'      => '†ANGEL†',
-                        'taid'         => '0964$aiD0964',
-                        'cer-x'        => 'Ger-X',
-                        '0964'         => '0964$aiD0964',
-                        'josefero4'    => 'JosefeR04',
-                        'bl4gkfy4h'    => 'BL4CKFY4H',
-                        'josé kieber'  => 'José kleber',
-                        'hama_yt'      => 'Hàma_YT',
-                        'hàmà_yt'      => 'Hàma_YT',
-                        'gr-raj'       => 'CR-RAJ',
-                        'john wick'    => 'john wick',
-                    ];
-
-                    $nombreMinuscula = mb_strtolower($nombre, 'UTF-8');
-
-                    if (array_key_exists($nombreMinuscula, $correccionesOcr)) {
-                        $nombre = $correccionesOcr[$nombreMinuscula];
-                    } else {
-                        $nombre = preg_replace('/^\d+\s*/', '', $nombre);
-                        $nombre = trim($nombre);
+                    // Mandamos el nombre al Motor Central
+                    $nombrePerfecto = $limpiarYFiltrar($nombreSucio);
+                    if ($nombrePerfecto !== false) {
+                        $jugadoresEnEstaImagen[$nombrePerfecto] = $puntos;
                     }
-
-                    // --- 3. Filtros finales ---
-                    if (preg_match('/h\s*\d+\s*min/i', $nombre)) continue;
-                    if (stripos($nombre, 'entrenamiento') !== false) continue; // 👈 BALA DE PLATA (Ya añadida)
-                    if (stripos($nombre, 'dia de') !== false) continue;        // 👈 BALA DE PLATA (Ya añadida)
-                    if (stripos($nombre, 'día de') !== false) continue;        // 👈 BALA DE PLATA (Ya añadida)
-                    if (in_array(strtolower($nombre), $prohibitedWords)) continue;
-                    if (is_numeric($nombre) || strlen($nombre) < 2) continue;
-
-                    $jugadoresEnEstaImagen[$nombre] = $puntos;
                 }
             }
             // ==========================================
