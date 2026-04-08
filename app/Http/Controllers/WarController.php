@@ -46,6 +46,7 @@ class WarController extends Controller
         $apiKey = env('API_KEY_EXTERNAL');
         $totalProcessed = 0;
         $jugadoresProcesados = [];
+        $imagenesFallidas = [];
 
         foreach ($request->file('war_images') as $image) {
 
@@ -86,6 +87,7 @@ class WarController extends Controller
             if (!$ocrText) {
                 $nombreArchivo = $image->getClientOriginalName();
                 Log::error("La imagen '{$nombreArchivo}' fue rechazada por la API después de {$maxIntentos} intentos y se omitió.");
+                $imagenesFallidas[] = $nombreArchivo;
                 continue;
             }
 
@@ -100,18 +102,24 @@ class WarController extends Controller
             $correccionesOcr = [
                 'atxena'           => 'athena',
                 'tangel†'          => '†ANGEL†',
+                'tangel'          => '†ANGEL†',
                 'taid'             => '0964$aiD0964',
                 '0964'             => '0964$aiD0964',
                 'said 0964'        => '0964$aiD0964',
                 '0964 said 0964'   => '0964$aiD0964',
+                '09642'            => '0964$aiD0964',
                 'cer-x'            => 'Ger-X',
+                'ger-x'            => 'Ger-X',
                 'josefero4'        => 'JosefeR04',
                 'bl4gkfy4h'        => 'BL4CKFY4H',
                 'josé kieber'      => 'José kleber',
-                'hama_yt'          => 'Hàma_YT',
-                'hàmà_yt'          => 'Hàma_YT',
-                'hamayt'           => 'Hàma_YT',
-                'hàmáyt'           => 'Hàma_YT',
+                'hama_yt'          => 'Hàmà_YT',
+                'hàmà_yt'          => 'Hàmà_YT',
+                'hamayt'           => 'Hàmà_YT',
+                'hàmà.yt'           => 'Hàmà_YT',
+                'hàmáyt'           => 'Hàmà_YT',
+                'hàmàyt'           => 'Hàmà_YT',
+                'hámá.yt'           => 'Hàmà_YT',
                 'gr-raj'           => 'CR-RAJ',
                 'john wick'        => 'john wick',
                 'byarman27xx'      => 'ByARman27Xx',
@@ -120,26 +128,45 @@ class WarController extends Controller
                 '23 biskuji'          => 'Biskuii',
                 '-1 ihident i-'    => '-| iHidenT |-',
                 '-1 ihiddent -'    => '-| iHidenT |-',
+                'papagayo so3'     => 'papagayo 503',
+                'papagayo503'     => 'papagayo 503',
+                'machetegod'       => 'machetegod',
+                '★9 hanibal★' => '★♥HANIBAL♥★',
+                'cartero' => 'Certero',
+                'el coco loco' => 'EL COCO LOCO',
+                'destrukc' => 'Destrukc',
+                'mario:al' => 'Mario.AL',
+                'strong' => 'Strong',
+                '<papagayo 503</papagayo 503'  => 'papagayo 503',
+                'xerau'  => 'Xerau',
+                'bryancrx'  => 'BryanCRx',
+                'wos'  => 'WOS',
+
             ];
 
             // Esta función recibe el nombre sucio y devuelve el nombre perfecto (o "false" si es basura)
             $limpiarYFiltrar = function ($nombreCrudo) use ($correccionesOcr, $prohibitedWords) {
-                // Limpieza inicial
+                // 1. Limpieza inicial
                 $nombre = str_replace(['*', '_', '~'], '', $nombreCrudo);
                 $nombre = trim($nombre);
                 $nombre = preg_replace('/^ID\s*/i', '', $nombre);
                 $nombre = trim($nombre);
 
-                // Diccionario
+                // 2. Preparamos las dos versiones (con números y sin números)
                 $nombreMinuscula = mb_strtolower($nombre, 'UTF-8');
+                $nombreSinNumeros = preg_replace('/^\d+\s*/', '', $nombre);
+                $nombreSinNumerosMinuscula = mb_strtolower(trim($nombreSinNumeros), 'UTF-8');
+
+                // 3. EL DOBLE CHEQUEO (¡Super importante!)
                 if (array_key_exists($nombreMinuscula, $correccionesOcr)) {
                     $nombre = $correccionesOcr[$nombreMinuscula];
+                } elseif (array_key_exists($nombreSinNumerosMinuscula, $correccionesOcr)) {
+                    $nombre = $correccionesOcr[$nombreSinNumerosMinuscula];
                 } else {
-                    $nombre = preg_replace('/^\d+\s*/', '', $nombre);
-                    $nombre = trim($nombre);
+                    $nombre = trim($nombreSinNumeros);
                 }
 
-                // Filtros finales (Balas de Plata)
+                // 4. Filtros finales (Balas de Plata)
                 if (preg_match('/h\s*\d+\s*min/i', $nombre)) return false;
                 if (stripos($nombre, 'entrenamiento') !== false) return false;
                 if (stripos($nombre, 'dia de') !== false) return false;
@@ -147,7 +174,7 @@ class WarController extends Controller
                 if (in_array(strtolower($nombre), $prohibitedWords)) return false;
                 if (is_numeric($nombre) || strlen($nombre) < 2) return false;
 
-                return $nombre; // Si sobrevivió a todo, devolvemos el nombre limpio
+                return $nombre;
             };
             // ==========================================
 
@@ -232,6 +259,19 @@ class WarController extends Controller
                 if ($count >= 9) break;
 
                 $player = Player::firstOrNew(['name' => $nombre]);
+
+                // 👇 LA SOLUCIÓN AL BUG DE LA SEMANA
+                // Si el jugador es nuevo en el sistema, lo inicializamos con 0 en todas partes
+                // para que los huecos vacíos (NULL) no arruinen tu Excel.
+                if (!$player->exists) {
+                    $player->week_1 = 0;
+                    $player->week_2 = 0;
+                    $player->week_3 = 0;
+                    $player->week_4 = 0;
+                    $player->week_5 = 0;
+                }
+
+                // Asignamos los puntos a la semana seleccionada
                 $player->{$weekColumn} = $puntos;
                 $player->save();
 
@@ -243,12 +283,22 @@ class WarController extends Controller
             sleep(4);
         }
 
-        //dd($result, $jugadoresProcesados);
+        dd($result, $jugadoresProcesados);
         if ($totalProcessed === 0) {
-            return back()->withErrors(['war_images' => 'No se detectaron datos. API saturada.']);
+            $mensajeError = 'No se detectaron datos. API saturada o imágenes borrosas.';
+            if (count($imagenesFallidas) > 0) {
+                $mensajeError .= ' La API rechazó por Timeout: ' . implode(', ', $imagenesFallidas);
+            }
+            return back()->withErrors(['war_images' => $mensajeError]);
         }
 
-        return back()->with('success', "¡Éxito! Se actualizaron $totalProcessed registros.")
+        $mensajeExito = "¡Éxito! Se actualizaron $totalProcessed registros.";
+        if (count($imagenesFallidas) > 0) {
+            // Si hubo errores, le pegamos la advertencia al final del mensaje
+            $nombresFallidos = implode(', ', $imagenesFallidas);
+            $mensajeExito .= " ⚠️ ATENCIÓN: El servidor OCR estaba muy saturado y no pudo procesar estas imágenes: " . $nombresFallidos;
+        }
+        return back()->with('success', $mensajeExito)
             ->with('jugadores', $jugadoresProcesados);
     }
     public function downloadExcel()
