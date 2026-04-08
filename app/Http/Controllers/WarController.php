@@ -141,6 +141,8 @@ class WarController extends Controller
                 'xerau'  => 'Xerau',
                 'bryancrx'  => 'BryanCRx',
                 'wos'  => 'WOS',
+                'eljeff'  => 'el_jeff',
+                '☆シ 千モリイ ☆シ' => '☆シ チモリIX ☆シ',
 
             ];
 
@@ -283,7 +285,7 @@ class WarController extends Controller
             sleep(4);
         }
 
-        dd($result, $jugadoresProcesados);
+        //dd($result, $jugadoresProcesados);
         if ($totalProcessed === 0) {
             $mensajeError = 'No se detectaron datos. API saturada o imágenes borrosas.';
             if (count($imagenesFallidas) > 0) {
