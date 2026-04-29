@@ -63,7 +63,8 @@ class WarController extends Controller
                         ->post('https://api.ocr.space/parse/image', [
                             'apikey' => $apiKey,
                             'language' => 'eng',
-                            'OCREngine' => '3'
+                            'OCREngine' => '3',
+                            'scale'     => 'true',
                         ]);
 
                     $result = $response->json();
@@ -146,7 +147,7 @@ class WarController extends Controller
 
             ];
 
-            // Esta función recibe el nombre sucio y devuelve el nombre perfecto (o "false" si es basura)
+            // Esta función recibe el nombre sucio y devuelve el nombre perfecto
             $limpiarYFiltrar = function ($nombreCrudo) use ($correccionesOcr, $prohibitedWords) {
                 // 1. Limpieza inicial
                 $nombre = str_replace(['*', '_', '~'], '', $nombreCrudo);
@@ -154,12 +155,12 @@ class WarController extends Controller
                 $nombre = preg_replace('/^ID\s*/i', '', $nombre);
                 $nombre = trim($nombre);
 
-                // 2. Preparamos las dos versiones (con números y sin números)
+                // 2. Preparamos las dos versiones
                 $nombreMinuscula = mb_strtolower($nombre, 'UTF-8');
                 $nombreSinNumeros = preg_replace('/^\d+\s*/', '', $nombre);
                 $nombreSinNumerosMinuscula = mb_strtolower(trim($nombreSinNumeros), 'UTF-8');
 
-                // 3. EL DOBLE CHEQUEO (¡Super importante!)
+                // 3. EL DOBLE CHEQUEO
                 if (array_key_exists($nombreMinuscula, $correccionesOcr)) {
                     $nombre = $correccionesOcr[$nombreMinuscula];
                 } elseif (array_key_exists($nombreSinNumerosMinuscula, $correccionesOcr)) {
@@ -173,6 +174,8 @@ class WarController extends Controller
                 if (stripos($nombre, 'entrenamiento') !== false) return false;
                 if (stripos($nombre, 'dia de') !== false) return false;
                 if (stripos($nombre, 'día de') !== false) return false;
+                if (stripos($nombre, 'detalles') !== false) return false; // 👈 CORRECCIÓN APLICADA
+                if (stripos($nombre, 'guerra') !== false) return false;   // 👈 CORRECCIÓN APLICADA
                 if (in_array(strtolower($nombre), $prohibitedWords)) return false;
                 if (is_numeric($nombre) || strlen($nombre) < 2) return false;
 
@@ -221,15 +224,19 @@ class WarController extends Controller
             }
 
             // ==========================================
-            // 🆘 PLAN B: Formato de Lista (Texto arriba, número abajo)
+            // 🆘 PLAN B y PLAN C (Rescate para tablas rotas por el OCR)
             // ==========================================
+
+            // Si el Plan A falló por completo, quitamos las barras "|" para que los otros planes no se confundan
+            $textoSinBarras = str_replace('|', '', $ocrText);
+
+            // 🆘 PLAN B: Formato de Lista (Texto arriba, número abajo)
             if (empty($jugadoresEnEstaImagen)) {
-                preg_match_all('/^(.+)\r?\n\s*(\d{1,4})\s*$/mi', $ocrText, $matchesPlanB, PREG_SET_ORDER);
+                preg_match_all('/^\s*(.+)\r?\n\s*(\d{1,4})\s*$/mi', $textoSinBarras, $matchesPlanB, PREG_SET_ORDER);
                 foreach ($matchesPlanB as $match) {
                     $nombreSucio = trim($match[1]);
                     $puntos = (int) $match[2];
 
-                    // Mandamos el nombre al Motor Central
                     $nombrePerfecto = $limpiarYFiltrar($nombreSucio);
                     if ($nombrePerfecto !== false) {
                         $jugadoresEnEstaImagen[$nombrePerfecto] = $puntos;
@@ -237,16 +244,14 @@ class WarController extends Controller
                 }
             }
 
-            // ==========================================
             // 🚨 PLAN C: Formato de Línea Única (Ranking ID Nombre Puntos)
-            // ==========================================
             if (empty($jugadoresEnEstaImagen)) {
-                preg_match_all('/^(?:\d+\s+)?(?:ID\s+)?(.+?)\s+(\d{1,4})$/mi', $ocrText, $matchesPlanC, PREG_SET_ORDER);
+                // 👈 REGEX MEJORADO para ignorar espacios y capturar todo en la misma línea
+                preg_match_all('/^\s*(?:\d+\s+)?(?:ID\s+)?(.+?)\s+(\d{1,4})\s*$/mi', $textoSinBarras, $matchesPlanC, PREG_SET_ORDER);
                 foreach ($matchesPlanC as $match) {
                     $nombreSucio = trim($match[1]);
                     $puntos = (int) $match[2];
 
-                    // Mandamos el nombre al Motor Central
                     $nombrePerfecto = $limpiarYFiltrar($nombreSucio);
                     if ($nombrePerfecto !== false) {
                         $jugadoresEnEstaImagen[$nombrePerfecto] = $puntos;
@@ -285,7 +290,7 @@ class WarController extends Controller
             sleep(4);
         }
 
-        //dd($result, $jugadoresProcesados);
+        // dd($result, $jugadoresProcesados);
         if ($totalProcessed === 0) {
             $mensajeError = 'No se detectaron datos. API saturada o imágenes borrosas.';
             if (count($imagenesFallidas) > 0) {
